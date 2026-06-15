@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<title>Extrator CT-e Pralog</title>
+
+<style>
+body {
+    font-family: Arial;
+    background: #eef1f5;
+    padding: 40px;
+    text-align: center;
+}
+
+.container {
+    background: white;
+    padding: 30px;
+    width: 750px;
+    margin: auto;
+    border-radius: 10px;
+    box-shadow: 0 0 10px rgba(0,0,0,0.1);
+}
+
+.box {
+    background: #f5f5f5;
+    padding: 10px;
+    margin-top: 10px;
+    border-radius: 6px;
+    text-align: left;
+}
+</style>
+
+<!-- ✅ SCRIPT CORRETO (AGORA SIM) -->
+https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js>
+
+</head>
+
+<body>
+
+<div class="container">
+    <h2>📄 Extrator CT-e (Pralog)</h2>
+    <input type="file" id="file" accept="application/pdf">
+    <div id="resultado"></div>
+</div>
+
+<script>
+
+// ✅ worker (obrigatório)
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+"https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js";
+
+// ✅ util
+function limpar(v){
+    return v ? v.replace(/\D/g,'') : "-";
+}
+
+function pegarTodos(texto, regex){
+    return [...texto.matchAll(regex)].map(e => e[1]);
+}
+
+// ✅ upload
+document.getElementById("file").addEventListener("change", function(e){
+
+    const file = e.target.files[0];
+    if (!file) return;
+
+    document.getElementById("resultado").innerHTML = "⏳ Processando...";
+
+    const reader = new FileReader();
+
+    reader.onload = async function(){
+
+        try {
+
+            const pdf = await pdfjsLib.getDocument({
+                data: new Uint8Array(this.result)
+            }).promise;
+
+            let texto = "";
+
+            for (let i = 1; i <= pdf.numPages; i++){
+                const page = await pdf.getPage(i);
+                const content = await page.getTextContent();
+
+                content.items.forEach(item => {
+                    texto += item.str + " ";
+                });
+            }
+
+            processar(texto.toUpperCase());
+
+        } catch (erro) {
+            document.getElementById("resultado").innerHTML =
+            "❌ Erro ao ler PDF: " + erro.message;
+        }
+    };
+
+    reader.readAsArrayBuffer(file);
+});
+
+// ✅ processamento
+function processar(texto){
+
+    // ID ou IDR
+    const qtd = (texto.match(/CT-E/g) || []).length;
+    const tipo = qtd === 1 ? "IDR" : "ID";
+
+    // CT-e chave completa
+    const chavesCTE = pegarTodos(texto, /CHAVE DE ACESSO\s*([\d\s]+)/g)
+        .map(limpar);
+
+    // notas
+    const notas = pegarTodos(texto, /NF-E\s*(\d+)/g);
+
+    // chave NF completa
+    const chaveNF = pegarTodos(texto, /-\d-([\d\-]+)/g)
+        .map(limpar);
+
+    // motorista
+    const motorista = (texto.match(/MOTORISTA:\s*([A-Z\s]+)/) || ["","-"])[1];
+
+    // placas
+    const placasMatch = texto.match(/PLACA:\s*([A-Z0-9]+)\s*([A-Z0-9]+)/);
+    const placas = placasMatch ? [placasMatch[1], placasMatch[2]] : ["-","-"];
+
+    // CNPJ
+    const cnpjs = pegarTodos(texto, /(\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2})/g)
+        .map(limpar);
+
+    // nomes
+    const nomes = pegarTodos(texto, /([A-Z\s]+ LTDA|[A-Z\s]+ S\.A)/g);
+
+    const remetente = nomes[0] || "-";
+    const destinatario = nomes[1] || "-";
+
+    document.getElementById("resultado").innerHTML = `
+        <div class="box"><b>TIPO:</b> ${tipo}</div>
+
+        <div class="box"><b>REMETENTE:</b><br>${remetente}<br>CNPJ: ${cnpjs[0] || "-"}</div>
+
+        <div class="box"><b>DESTINATARIO:</b><br>${destinatario}<br>CNPJ: ${cnpjs[1] || "-"}</div>
+
+        <div class="box"><b>MOTORISTA:</b> ${motorista}</div>
+
+        <div class="box"><b>PLACAS:</b> ${placas.join(" | ")}</div>
+
+        <div class="box"><b>NOTAS:</b><br>${notas.join("<br>") || "-"}</div>
+
+        <div class="box"><b>CHAVES NF:</b><br>${chaveNF.join("<br>") || "-"}</div>
+
+        <div class="box"><b>CHAVES CT-e:</b><br>${chavesCTE.join("<br>") || "-"}</div>
+    `;
+}
+
+</script>
+
+</body>
+</html>
